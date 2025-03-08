@@ -21,6 +21,7 @@ import java.util.*
 class TaskFileSystemService(
     private val ocrProperties: OcrProperties
 ) {
+    private val rootPath: String = ocrProperties.rootPath
     private val inputDirectoryName: String = "input"
     private val outputDirectoryName: String = "output"
 
@@ -39,10 +40,6 @@ class TaskFileSystemService(
             return contentType
         }
 
-        fun getInputFile(taskPath: String, taskId: UUID, randomizedFileName: String): File = Path.of(taskPath, taskId.toString(), "input", randomizedFileName).toFile()
-
-        fun getOutputFile(taskPath: String, taskId: UUID, randomizedFileName: String): File = Path.of(taskPath, taskId.toString(), "output", randomizedFileName).toFile()
-
         private fun cloneInputStream (inputStream: InputStream): InputStream {
             val byteArrayOutputStream = ByteArrayOutputStream()
             inputStream.transferTo(byteArrayOutputStream)
@@ -51,15 +48,17 @@ class TaskFileSystemService(
         }
     }
 
-    @Throws(IOException::class)
-    fun createTaskDirectories(id: UUID) {
-        val path = Path.of(ocrProperties.taskPath, id.toString())
+    fun getInputFile(taskId: UUID, randomizedFileName: String): File = Path.of(rootPath, taskId.toString(), inputDirectoryName, randomizedFileName).toFile()
+
+    fun getOutputFile(taskId: UUID, randomizedFileName: String): File = Path.of(rootPath, taskId.toString(), outputDirectoryName, randomizedFileName).toFile()
+
+    fun createDirectories(id: UUID) {
+        val path = Path.of(rootPath, id.toString())
         Files.createDirectories(path)
         Files.createDirectory(path.resolve("input"))
         Files.createDirectory(path.resolve("output"))
     }
 
-    @Throws(IOException::class)
     fun uploadFile(
         multiPartFile: MultipartFile,
         taskId: UUID,
@@ -67,7 +66,7 @@ class TaskFileSystemService(
         input: Boolean = true) {
 
         val targetFile = Path.of(
-            ocrProperties.taskPath,
+            ocrProperties.rootPath,
             taskId.toString(),
             (if (input) inputDirectoryName else outputDirectoryName),
             fileName
@@ -79,10 +78,9 @@ class TaskFileSystemService(
         Files.delete(file)
     }
     fun cleanUp(id: UUID) {
-        deleteDirectoryRecursively(Path.of(ocrProperties.taskPath))
+        deleteDirectoryRecursively(Path.of(ocrProperties.rootPath))
     }
 
-    @Throws(IOException::class)
     private fun deleteDirectoryRecursively(path: Path) {
         Files.walk(path)
             .sorted(Comparator.reverseOrder())

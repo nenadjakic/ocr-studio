@@ -21,12 +21,16 @@ class OcrService(
     private val ocrProperties: OcrProperties,
     private val parallelizationManager: ParallelizationManager,
     private val tesseractFactory: TesseractFactory,
-    private val taskRepository: TaskRepository
+    private val taskRepository: TaskRepository,
+    private val taskFileSystemService: TaskFileSystemService
 ) {
     private val logger = LoggerFactory.getLogger(OcrService::class.java)
 
     fun schedule(id: UUID) {
-        val task = taskRepository.findById(id).orElseThrow { MissingDocumentOcrException(MessageConst.MISSING_DOCUMENT.description) }
+        val task = taskRepository
+            .findById(id)
+            .orElseThrow { MissingDocumentOcrException(MessageConst.MISSING_DOCUMENT.description) }
+
 
         if (Status.getInProgressStatuses().contains(task.ocrProgress.status)) {
             throw OcrException("Task with id: $id is in progress and cannot be scheduled.")
@@ -34,66 +38,57 @@ class OcrService(
         val tesseract = tesseractFactory.create(
             task.ocrConfig.language,
             task.ocrConfig.ocrEngineMode.tesseractValue,
-            task.ocrConfig.pageSegmentationMode.tesseractValue, null)
+            task.ocrConfig.pageSegmentationMode.tesseractValue,
+            null
+        )
 
-        val executor = OcrExecutor(
+        OcrExecutor(
             id,
             task.schedulerConfig.startDateTime,
             ocrProperties,
             tesseract,
-            taskRepository
-        )
+            taskRepository,
+            taskFileSystemService
+        ).also {
+            parallelizationManager.schedule(it)
+        }
 
-        parallelizationManager.schedule(executor)
-        task.ocrProgress.status = Status.TRIGGERED
-        taskRepository.save(task)
+        task.apply {
+            ocrProgress.status = Status.TRIGGERED
+            taskRepository.save(this)
+        }
     }
 
     fun interrupt(id: UUID) {
-        val interrupted = parallelizationManager.interrupt(id)
-
-        if (interrupted != null) {
-            taskRepository.findById(id).getOrNull()?.let {
-                it.ocrProgress.status = Status.INTERRUPTED
-                taskRepository.save(it)
+        val interrupted = parallelizationManager.interrupt(id)?.let {
+            taskRepository.findById(id).getOrNull()?.apply {
+                ocrProgress.status = Status.INTERRUPTED
+                taskRepository.save(this)
             }
         }
     }
 
     fun interruptAll(id: UUID) {
-        val interruptResult = parallelizationManager.interruptAll()
-        for (interruptResultEntry in interruptResult.entries) {
-            if (interruptResultEntry.value != null) {
-                taskRepository.findById(id).getOrNull()?.let {
-                    it.ocrProgress.status = Status.INTERRUPTED
-                    taskRepository.save(it)
+        parallelizationManager.interruptAll().entries
+            .filter { it.value != null }
+            .forEach {
+                taskRepository.findById(id).getOrNull()?.apply {
+                    ocrProgress.status = Status.INTERRUPTED
+                    taskRepository.save(this)
                 }
             }
-        }
     }
 
-    fun getProgress(id: UUID): OcrProgress {
-        val progressInfo = parallelizationManager.getProgress(id)
+    fun getProgress(id: UUID): OcrProgress =
+        parallelizationManager.getProgress(id)?.toOcrProgress() ?: taskRepository.findById(id)
+            .orElseThrow { MissingDocumentOcrException(MessageConst.MISSING_DOCUMENT.description) }
+            .let { it.ocrProgress }
 
-        if (progressInfo == null) {
-            // get progress from datastore
-            val task = taskRepository.findById(id).orElseThrow { MissingDocumentOcrException(MessageConst.MISSING_DOCUMENT.description) }
-            return task.ocrProgress
-        } else {
-            return progressInfo.toOcrProgress()
-        }
-    }
 
-    fun clearFinished() {
-        parallelizationManager.clearFinished()
-    }
+    fun clearFinished() = parallelizationManager.clearFinished()
 
-    fun clearInterrupted() {
-        parallelizationManager.clearInterrupted()
-    }
+    fun clearInterrupted() = parallelizationManager.clearInterrupted()
 
     @Scheduled(cron = "0 0 23 * * ?")
-    fun clear() {
-        parallelizationManager.clear()
-    }
+    fun clear() = parallelizationManager.clear()
 }

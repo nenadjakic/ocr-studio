@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component
 @ConfigurationProperties(prefix = "ocr")
 class OcrProperties {
 
-    lateinit var taskPath: String
+    lateinit var rootPath: String
     var tesseract: TesseractProperties = TesseractProperties()
 
     class TesseractProperties {

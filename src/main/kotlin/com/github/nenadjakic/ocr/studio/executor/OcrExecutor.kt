@@ -1,6 +1,7 @@
 package com.github.nenadjakic.ocr.studio.executor
 
 import com.github.nenadjakic.ocr.studio.config.OcrProperties
+import com.github.nenadjakic.ocr.studio.entity.Document
 import com.github.nenadjakic.ocr.studio.entity.OcrConfig
 import com.github.nenadjakic.ocr.studio.entity.OutDocument
 import com.github.nenadjakic.ocr.studio.entity.Task
@@ -28,6 +29,7 @@ class OcrExecutor(
     private val ocrProperties: OcrProperties,
     private val tesseract: ITesseract,
     private val taskRepository: TaskRepository,
+    private val taskFileSystemService: TaskFileSystemService,
     override val progressInfo: ProgressInfo = ProgressInfo()
 ) : Executor {
     private val logger = LoggerFactory.getLogger(OcrExecutor::class.java)
@@ -44,9 +46,9 @@ class OcrExecutor(
         try {
             progressInfo.description = "Starting ocr of documents..."
             for (document in task.inDocuments.sortedBy { it.originalFileName }) {
-                val inFile = TaskFileSystemService.getInputFile(ocrProperties.taskPath, task.id!!, document.randomizedFileName)
+                val inFile = taskFileSystemService.getInputFile(task.id!!, document.randomizedFileName)
                 if (inFile.exists()) {
-                    val outFile = TaskFileSystemService.getOutputFile(ocrProperties.taskPath, task.id!!, UUID.randomUUID().toString())
+                    val outFile = taskFileSystemService.getOutputFile(task.id!!, UUID.randomUUID().toString())
 
                     document.outDocument = OutDocument()
                     document.outDocument!!.outputFileName = outFile.name
@@ -97,7 +99,7 @@ class OcrExecutor(
                 val mergedFileName = "merged_" + UUID.randomUUID() + "." + task.ocrConfig.fileFormat.getExtension()
                 task.inDocuments.mergedDocumentName = mergedFileName
 
-                val mergedFile = TaskFileSystemService.getOutputFile(ocrProperties.taskPath, task.id!!, mergedFileName)
+                val mergedFile = taskFileSystemService.getOutputFile(task.id!!, mergedFileName)
 
                 when (task.ocrConfig.fileFormat) {
                     OcrConfig.FileFormat.TEXT -> {
@@ -122,17 +124,24 @@ class OcrExecutor(
 
     private fun mergeTextDocuments(mergedFile: File, task: Task) {
         BufferedWriter(FileWriter(mergedFile)).use { writer ->
-            for (document in task.inDocuments.sortedBy { it.originalFileName }) {
-                val file = Path.of(ocrProperties.taskPath, task.id.toString(), "output", document.outDocument!!.outputFileName + "." + task.ocrConfig.fileFormat.getExtension()).toFile()
-                BufferedReader(FileReader(file)).use { reader ->
-                    var line: String?
-                    while (reader.readLine().also { line = it } != null) {
-                        writer.write(line)
-                        writer.newLine()
+            task.inDocuments.sortedBy { it.originalFileName }
+                .forEach { document ->
+                    val file = Path.of(
+                        ocrProperties.rootPath,
+                        task.id.toString(),
+                        "output",
+                        "${document.outDocument!!.outputFileName}.${task.ocrConfig.fileFormat.getExtension()}"
+                    ).toFile()
+
+                    BufferedReader(FileReader(file)).use { reader ->
+                        var line: String?
+                        while (reader.readLine().also { line = it } != null) {
+                            writer.write(line)
+                            writer.newLine()
+                        }
                     }
+                    writer.newLine()
                 }
-                writer.newLine()
-            }
         }
     }
 
@@ -148,7 +157,7 @@ class OcrExecutor(
             writer.write("<html>")
             writer.newLine()
             for ((index, document) in task.inDocuments.sortedBy { it.originalFileName }.withIndex()) {
-                val file = Path.of(ocrProperties.taskPath, task.id.toString(), "output", document.outDocument!!.outputFileName + "." + task.ocrConfig.fileFormat.getExtension()).toFile()
+                val file = Path.of(ocrProperties.rootPath, task.id.toString(), "output", document.outDocument!!.outputFileName + "." + task.ocrConfig.fileFormat.getExtension()).toFile()
 
                 saxParser.parse(file, saxHandler)
                 if (index == 0) {
@@ -170,18 +179,24 @@ class OcrExecutor(
 
     private fun mergePdfDocuments(mergedFile: File, task: Task) {
         PDDocument().use { pdDocument ->
-            for (document in task.inDocuments.sortedBy { it.originalFileName }) {
-                val file = Path.of(ocrProperties.taskPath, task.id.toString(), "output", document.outDocument!!.outputFileName + "." + task.ocrConfig.fileFormat.getExtension()).toFile()
-                val outDocument = Loader.loadPDF(file)
-                outDocument.pages.forEach { page ->
-                    pdDocument.addPage(page)
+            task.inDocuments.sortedBy { it.originalFileName }.forEach { document ->
+                val file = Path.of(
+                    ocrProperties.rootPath,
+                    task.id.toString(),
+                    "output",
+                    "${document.outDocument!!.outputFileName}.${task.ocrConfig.fileFormat.getExtension()}"
+                ).toFile()
+
+                Loader.loadPDF(file).use { outDocument ->
+                    outDocument.pages.forEach { page ->
+                        pdDocument.addPage(page)
+                    }
                 }
             }
             pdDocument.save(mergedFile)
         }
     }
 
-    @Throws(IOException::class)
     private fun preProcessDocument(preProcess: Boolean, inFile: File): Map<Long, File> {
         val files = mutableMapOf<Long, File>()
         var order = 1L
@@ -189,13 +204,13 @@ class OcrExecutor(
         if (preProcess) {
             logger.info("Pre processing of input document ${inFile.name}.")
             if (mediaType.type.equals("image")) {
-                val originalImage = ImageIO.read(inFile)
-                val grayscaleImage = ImageHelper.convertImageToGrayscale(originalImage)
-                val tempGrayscaleImage = File.createTempFile("___", "_tmp")
-                val result = ImageIO.write(grayscaleImage, mediaType.subtype, tempGrayscaleImage)
-                if (result) {
-                    files[order++] = tempGrayscaleImage
-                }
+                val grayscaleImage = ImageHelper.convertImageToGrayscale(ImageIO.read(inFile))
+                File.createTempFile("___", "_tmp")
+                    .also {
+                        if (ImageIO.write(grayscaleImage, mediaType.subtype, it)) {
+                            files[order++] = it
+                        }
+                    }
             } else if (mediaType.toString() == "application/pdf") {
                Loader.loadPDF(inFile).use  {
                     val pdfRenderer = PDFRenderer(it)

@@ -38,7 +38,6 @@ class Application : CommandLineRunner {
             .build()
     }
 
-
     override fun run(vararg args: String?) {
 
     }

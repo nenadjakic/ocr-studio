@@ -43,10 +43,7 @@ class ParallelizationManagerImpl(
         return resultMap
     }
 
-    override fun getProgress(id: UUID): ProgressInfo? {
-        val runnable = runnables[id]
-        return runnable?.progressInfo
-    }
+    override fun getProgress(id: UUID): ProgressInfo?  = runnables[id]?.progressInfo
 
     override fun clearFinished() {
         val ids = mutableListOf<UUID>()

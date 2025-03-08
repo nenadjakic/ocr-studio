@@ -20,19 +20,14 @@ class TaskService(
     private val ocrProperties: OcrProperties
 ) {
 
-    fun findAll(): List<Task> = taskRepository.findAll(Sort.by(Sort.Order.asc("id")))
+    fun findAll(): List<Task> =
+        taskRepository.findAll(Sort.by(Sort.Order.asc("id")))
 
-    fun findById(id: UUID): Task? = taskRepository.findById(id).orElse(null)
+    fun findById(id: UUID): Task? =
+        taskRepository.findById(id).orElse(null)
 
-    fun findPage(pageNumber: Int, pageSize: Int): Page<Task> = taskRepository.findAll(PageRequest.of(pageNumber, pageSize, Sort.by(Sort.Order.asc("id"))))
-
-    private fun insert(task: Task): Task {
-        task.id = UUID.randomUUID()
-
-        taskFileSystemService.createTaskDirectories(task.id!!)
-
-        return taskRepository.insert(task)
-    }
+    fun findPage(pageNumber: Int, pageSize: Int): Page<Task> =
+        taskRepository.findAll(PageRequest.of(pageNumber, pageSize, Sort.by(Sort.Order.asc("id"))))
 
     fun insert(task: Task, files: Collection<MultipartFile>? = emptyList()): Task {
         val createdEntity = insert(task)
@@ -42,7 +37,14 @@ class TaskService(
         return createdEntity
     }
 
-    fun update(entity: Task): Task = taskRepository.save(entity)
+    private fun insert(task: Task): Task =
+        task.apply {
+            id = UUID.randomUUID()
+            taskFileSystemService.createDirectories(id!!)
+        }.let(taskRepository::insert)
+
+    fun update(entity: Task): Task =
+        taskRepository.save(entity)
 
     fun delete(task: Task) {
         if (task.ocrProgress.status != Status.CREATED) {
@@ -53,23 +55,22 @@ class TaskService(
         taskRepository.delete(task)
     }
 
-    fun deleteById(id: UUID) {
-        val task = taskRepository.findById(id).orElseThrow { MissingDocumentOcrException(MessageConst.MISSING_DOCUMENT.description) }
-        delete(task)
-    }
+    fun deleteById(id: UUID) =
+        taskRepository
+            .findById(id)
+            .orElseThrow { MissingDocumentOcrException(MessageConst.MISSING_DOCUMENT.description) }
+            .also  { delete(it) }
 
     fun upload(id: UUID, multipartFiles: Collection<MultipartFile>): List<Document> {
-        val createdDocuments = mutableListOf<Document>()
         val task = taskRepository.findById(id).orElseThrow { MissingDocumentOcrException(MessageConst.MISSING_DOCUMENT.description) }
 
-        for (multiPartFile in multipartFiles) {
-            val document = Document(multiPartFile.originalFilename!!, UUID.randomUUID().toString()).apply {
-                type = TaskFileSystemService.getContentType(multiPartFile)
+        val createdDocuments = multipartFiles.map { multipartFile ->
+            Document(multipartFile.originalFilename!!, UUID.randomUUID().toString()).apply {
+                type = TaskFileSystemService.getContentType(multipartFile)
+            }.also { document ->
+                taskFileSystemService.uploadFile(multipartFile, id, document.randomizedFileName)
+                task.addInDocument(document)
             }
-
-            taskFileSystemService.uploadFile(multiPartFile, id, document.randomizedFileName)
-            task.addInDocument(document)
-            createdDocuments.add(document)
         }
 
         taskRepository.save(task)
@@ -77,41 +78,45 @@ class TaskService(
     }
 
     fun removeFile(id: UUID, originalFileName: String) {
-        val task = taskRepository.findById(id).orElseThrow { MissingDocumentOcrException(MessageConst.MISSING_DOCUMENT.description) }
+        taskRepository.findById(id)
+            .orElseThrow { MissingDocumentOcrException(MessageConst.MISSING_DOCUMENT.description) }
+            .let { task ->
+                if (task.ocrProgress.status != Status.CREATED) {
+                    throw IllegalStateException(MessageConst.ILLEGAL_STATUS.description)
+                }
 
-        if (task.ocrProgress.status != Status.CREATED) {
-            throw IllegalStateOcrException(MessageConst.ILLEGAL_STATUS.description)
-        }
-
-        task.inDocuments.find { it.originalFileName == originalFileName }?.let {
-            taskFileSystemService.deleteFile(TaskFileSystemService.getInputFile(ocrProperties.taskPath, id, it.randomizedFileName).toPath())
-            task.inDocuments.remove(it)
-        }
-        taskRepository.save(task)
+                task.inDocuments.find { it.originalFileName == originalFileName }?.let {
+                    taskFileSystemService.deleteFile(taskFileSystemService.getInputFile(id, it.randomizedFileName).toPath())
+                    task.inDocuments.remove(it)
+                }
+                taskRepository.save(task)
+            }
     }
 
     fun removeAllFiles(task: Task) {
         if (task.ocrProgress.status != Status.CREATED) {
-            throw IllegalStateOcrException(MessageConst.ILLEGAL_STATUS.description)
+            throw IllegalStateException(MessageConst.ILLEGAL_STATUS.description)
         }
-        task.inDocuments.forEach { taskFileSystemService.deleteFile(TaskFileSystemService.getInputFile(ocrProperties.taskPath, task.id!!, it.randomizedFileName).toPath()) }
+        task.inDocuments.forEach { taskFileSystemService.deleteFile(taskFileSystemService.getInputFile(task.id!!, it.randomizedFileName).toPath()) }
         task.inDocuments.clear()
         taskRepository.save(task)
     }
 
-    fun removeAllFiles(id: UUID) {
-        val task = taskRepository.findById(id).orElseThrow { MissingDocumentOcrException(MessageConst.MISSING_DOCUMENT.description) }
-
-        removeAllFiles(task)
-    }
+    fun removeAllFiles(id: UUID) =
+        taskRepository.findById(id)
+            .orElseThrow { MissingDocumentOcrException(MessageConst.MISSING_DOCUMENT.description) }
+            .also { removeAllFiles(it) }
 
     fun update(id: UUID, properties: Map<Object, Object>) {
         TODO()
     }
 
-    fun update(id: UUID, language: String): Int = taskRepository.updateLanguageById(id, language)
+    fun update(id: UUID, language: String): Int =
+        taskRepository.updateLanguageById(id, language)
 
-    fun update(id: UUID, ocrConfig: OcrConfig): Int = taskRepository.updateOcrConfigById(id, ocrConfig)
+    fun update(id: UUID, ocrConfig: OcrConfig): Int =
+        taskRepository.updateOcrConfigById(id, ocrConfig)
 
-    fun update(id: UUID, schedulerConfig: SchedulerConfig): Int = taskRepository.updateSchedulerConfigById(id, schedulerConfig)
+    fun update(id: UUID, schedulerConfig: SchedulerConfig): Int =
+        taskRepository.updateSchedulerConfigById(id, schedulerConfig)
 }
