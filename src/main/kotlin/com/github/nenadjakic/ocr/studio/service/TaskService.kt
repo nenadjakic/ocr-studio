@@ -107,7 +107,7 @@ class TaskService(
             val file = taskFileSystemService.getInputFile(id, inDocument.randomizedFileName)
             val fileExtension =
                 getFileExtension(inDocument.type)
-            Pair("${id}-${inDocument.randomizedFileName}${fileExtension}", ByteArrayResource(file.readBytes()))
+            Pair("${inDocument.randomizedFileName}${fileExtension}", ByteArrayResource(file.readBytes()))
         }
     }
 
