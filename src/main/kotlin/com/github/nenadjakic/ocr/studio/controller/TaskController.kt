@@ -16,6 +16,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.modelmapper.ModelMapper
+import org.springframework.core.io.ByteArrayResource
+import org.springframework.core.io.Resource
 import org.springframework.data.domain.Page
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
@@ -71,6 +73,49 @@ open class TaskController(
     )
     @GetMapping(value = ["/{id}"], produces = [MediaType.APPLICATION_JSON_VALUE])
     fun findById(@PathVariable id: UUID): ResponseEntity<Task> = ResponseEntity.ofNullable(taskService.findById(id))
+
+    @Operation(
+        operationId = "downloadInDocumentsById",
+        summary = "Get in documents as archive file.",
+        description = "Returns in documents as archive file with specified id."
+    )
+    @ApiResponses(
+        value = [
+            ApiResponse(responseCode = "200", description = "Successfully downloaded in documents.")
+        ]
+    )
+    @GetMapping(value = ["download/in/{id}"])
+    fun downloadInDocuments(@PathVariable id: UUID) =
+        getResourceEntity(taskService.findInDocuments(id))
+
+    @Operation(
+        operationId = "downloadInDocumentByIdAndRandomizedName",
+        summary = "Get in document.",
+        description = "Returns in document file with specified id and randomized name."
+    )
+    @ApiResponses(
+        value = [
+            ApiResponse(responseCode = "200", description = "Successfully downloaded in document.")
+        ]
+    )
+    @GetMapping(value = ["download/in/{id}/{randomizedFileName}"])
+    fun downloadInDocumentByRandomizedName(@PathVariable id: UUID,  @PathVariable randomizedFileName: String) =
+        getResourceEntity(taskService.findInDocument(id, randomizedFileName))
+
+    @Operation(
+        operationId = "downloadOutDocumentsById",
+        summary = "Get out document/documents.",
+        description = "Returns out document file/s with specified id."
+    )
+    @ApiResponses(
+        value = [
+            ApiResponse(responseCode = "200", description = "Successfully downloaded out documents.")
+        ]
+    )
+    @GetMapping(value = ["download/out/{id}"])
+    fun downloadOutDocument(@PathVariable id: UUID) {
+        getResourceEntity(taskService.findOutDocuments(id))
+    }
 
     @Operation(
         operationId = "createTask",
@@ -234,4 +279,12 @@ open class TaskController(
 
         return ResponseEntity.created(location).build()
     }
+
+    private fun getResourceEntity(resouceByName: Pair<String, ByteArrayResource>?): ResponseEntity<ByteArrayResource?> =
+        ResponseEntity.ok()
+            .headers { headers ->
+                headers.setContentDispositionFormData("attachment", resouceByName?.first)
+                headers.contentType = MediaType.APPLICATION_OCTET_STREAM
+            }
+            .body(resouceByName?.second)
 }

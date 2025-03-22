@@ -7,6 +7,7 @@ openapi-gradle = "1.9.0"
 springdoc-openapi = "2.8.5"
 tika = "2.9.2"
 tess4j = "5.15.0"
+apache-commons-compress = "1.27.1"
 
 [libraries]
 kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
@@ -21,6 +22,7 @@ tika-core = { module = "org.apache.tika:tika-core", version.ref = "tika" }
 tika-parsers = { module = "org.apache.tika:tika-parsers", version.ref = "tika" }
 tess4j = { module = "net.sourceforge.tess4j:tess4j", version.ref = "tess4j" }
 spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
+apache-commons-compress = { module = "org.apache.commons:commons-compress", version.ref = "apache-commons-compress" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
