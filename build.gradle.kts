@@ -39,6 +39,7 @@ dependencies {
     implementation(libs.tika.core)
     implementation(libs.tika.parsers)
     implementation(libs.tess4j)
+    implementation(libs.apache.commons.compress)
 
     testImplementation(libs.spring.boot.starter.test)
 }
