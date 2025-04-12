@@ -36,16 +36,16 @@ class OcrExecutor(
 
     override fun run() {
         val task = taskRepository.findById(id).orElseThrow()
-        logger.info("Started OCR for task: {}. Number of documents: {}", task.id, task.inDocuments.size)
+        logger.info("Started OCR for task: {}. Number of documents: {}", task.id, task.inDocuments.documents.size)
         progressInfo.progressInfoStatus = ProgressInfo.ProgressInfoStatus.IN_PROGRESS
-        progressInfo.totalTasks = task.inDocuments.size
+        progressInfo.totalTasks = task.inDocuments.documents.size
         progressInfo.description = "Starting ocr process..."
 
         task.ocrProgress = progressInfo.toOcrProgress()
         taskRepository.save(task)
         try {
             progressInfo.description = "Starting ocr of documents..."
-            for (document in task.inDocuments.sortedBy { it.originalFileName }) {
+            for (document in task.inDocuments.documents.sortedBy { it.originalFileName }) {
                 val inFile = taskFileSystemService.getInputFile(task.id!!, document.randomizedFileName)
                 if (inFile.exists()) {
                     val outFile = taskFileSystemService.getOutputFile(task.id!!, UUID.randomUUID().toString())
@@ -124,7 +124,7 @@ class OcrExecutor(
 
     private fun mergeTextDocuments(mergedFile: File, task: Task) {
         BufferedWriter(FileWriter(mergedFile)).use { writer ->
-            task.inDocuments.sortedBy { it.originalFileName }
+            task.inDocuments.documents.sortedBy { it.originalFileName }
                 .forEach { document ->
                     val file = Path.of(
                         ocrProperties.rootPath,
@@ -156,7 +156,7 @@ class OcrExecutor(
             writer.write("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">")
             writer.write("<html>")
             writer.newLine()
-            for ((index, document) in task.inDocuments.sortedBy { it.originalFileName }.withIndex()) {
+            for ((index, document) in task.inDocuments.documents.sortedBy { it.originalFileName }.withIndex()) {
                 val file = Path.of(ocrProperties.rootPath, task.id.toString(), "output", document.outDocument!!.outputFileName + "." + task.ocrConfig.fileFormat.getExtension()).toFile()
 
                 saxParser.parse(file, saxHandler)
@@ -179,7 +179,7 @@ class OcrExecutor(
 
     private fun mergePdfDocuments(mergedFile: File, task: Task) {
         PDDocument().use { pdDocument ->
-            task.inDocuments.sortedBy { it.originalFileName }.forEach { document ->
+            task.inDocuments.documents.sortedBy { it.originalFileName }.forEach { document ->
                 val file = Path.of(
                     ocrProperties.rootPath,
                     task.id.toString(),

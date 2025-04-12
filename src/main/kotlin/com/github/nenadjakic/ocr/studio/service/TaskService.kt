@@ -37,14 +37,14 @@ class TaskService(
         taskRepository.findAll(PageRequest.of(pageNumber, pageSize, Sort.by(Sort.Order.asc("id"))))
 
     private fun getResource(inDocuments: DocumentMutableList, id: UUID): ByteArrayResource? {
-        if (inDocuments.isEmpty()) {
+        if (inDocuments.documents.isEmpty()) {
             return null
         }
 
         ByteArrayOutputStream().use { zipByteArrayOutputStream ->
             BufferedOutputStream(zipByteArrayOutputStream).use { zipBufferedOutputStream ->
                 ZipArchiveOutputStream(zipBufferedOutputStream).use { zipArchiveOutputStream ->
-                    inDocuments.forEach {
+                    inDocuments.documents.forEach {
                         var file = taskFileSystemService.getInputFile(id, it.randomizedFileName)
                         val fileExtension = getFileExtension(it.type)
 
@@ -84,7 +84,7 @@ class TaskService(
 
     fun findInDocuments(id: UUID): Pair<String, ByteArrayResource>? {
         val inDocuments = taskRepository.findById(id).orElse(null).let { it.inDocuments }
-        return if (inDocuments.isEmpty()) {
+        return if (inDocuments.documents.isEmpty()) {
             null
         } else {
             val byteArrayResource = getResource(inDocuments, id)
@@ -98,7 +98,7 @@ class TaskService(
 
     fun findInDocument(id: UUID, randomizedFileName: String): Pair<String, ByteArrayResource>? {
         val inDocument = taskRepository.findById(id).orElse(null)?.let {
-            it.inDocuments.firstOrNull { document -> document.randomizedFileName == randomizedFileName }
+            it.inDocuments.documents.firstOrNull { document -> document.randomizedFileName == randomizedFileName }
         }
 
         return if (inDocument == null) {
@@ -174,7 +174,7 @@ class TaskService(
                 type = TaskFileSystemService.getContentType(multipartFile)
             }.also { document ->
                 taskFileSystemService.uploadFile(multipartFile, id, document.randomizedFileName)
-                task.addInDocument(document)
+                task.inDocuments.documents.add(document)
             }
         }
 
@@ -190,11 +190,11 @@ class TaskService(
                     throw IllegalStateException(MessageConst.ILLEGAL_STATUS.description)
                 }
 
-                task.inDocuments.find { it.originalFileName == originalFileName }?.let {
+                task.inDocuments.documents.find { it.originalFileName == originalFileName }?.let {
                     taskFileSystemService.deleteFile(
                         taskFileSystemService.getInputFile(id, it.randomizedFileName).toPath()
                     )
-                    task.inDocuments.remove(it)
+                    task.inDocuments.documents.remove(it)
                 }
                 taskRepository.save(task)
             }
@@ -204,7 +204,7 @@ class TaskService(
         if (task.ocrProgress.status != Status.CREATED) {
             throw IllegalStateException(MessageConst.ILLEGAL_STATUS.description)
         }
-        task.inDocuments.forEach {
+        task.inDocuments.documents.forEach {
             taskFileSystemService.deleteFile(
                 taskFileSystemService.getInputFile(
                     task.id!!,
@@ -212,7 +212,7 @@ class TaskService(
                 ).toPath()
             )
         }
-        task.inDocuments.clear()
+        task.inDocuments.documents.clear()
         taskRepository.save(task)
     }
 

@@ -15,10 +15,4 @@ class Task(
     var schedulerConfig: SchedulerConfig = SchedulerConfig()
     var ocrProgress: OcrProgress = OcrProgress()
     var inDocuments: DocumentMutableList = DocumentMutableList()
-        set(value) {
-            inDocuments.clear()
-            inDocuments.addAll(value)
-        }
-
-    fun addInDocument(document: com.github.nenadjakic.ocr.studio.entity.Document): Boolean = inDocuments.add(document)
 }
