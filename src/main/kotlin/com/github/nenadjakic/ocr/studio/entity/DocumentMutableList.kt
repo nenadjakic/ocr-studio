@@ -1,5 +1,6 @@
 package com.github.nenadjakic.ocr.studio.entity
 
-class DocumentMutableList : ArrayList<Document>() {
+data class DocumentMutableList(
+    val documents: MutableList<Document> = mutableListOf(),
     var mergedDocumentName: String? = null
-}
+)
